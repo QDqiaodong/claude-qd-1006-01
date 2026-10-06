@@ -45,10 +45,20 @@ export default {
   transferFilter: (id, target) =>
     call(http.post(`/filters/${id}/transfer`, null, params({ target }))),
 
-  // ---------------- 加药 ----------------
-  listDosings: (p) => call(http.get('/dosings', params(p))),
-  createDosing: (d) => call(http.post('/dosings', d)),
-  updateDosing: (id, d) => call(http.put(`/dosings/${id}`, d)),
+  // ---------------- 加药批次记录与异常复核 ----------------
+  listDosingRecords: (p) => call(http.get('/dosing-records', params(p))),
+  getDosingRecord: (id) => call(http.get(`/dosing-records/${id}`)),
+  listDosingAnomalies: (p) => call(http.get('/dosing-records/anomalies', params(p))),
+  createDosingRecord: (d) => call(http.post('/dosing-records', d)),
+  updateDosingRecord: (id, d) => call(http.put(`/dosing-records/${id}`, d)),
+  confirmDosingRecord: (id, d) => call(http.post(`/dosing-records/${id}/confirm`, d)),
+  markDosingAnomaly: (id, d) => call(http.post(`/dosing-records/${id}/mark-anomaly`, d)),
+  reviewReturnDosingRecord: (id, d) => call(http.post(`/dosing-records/${id}/review-return`, d)),
+
+  // ---------------- 工艺配置（药剂 / 目标工段） ----------------
+  listProcessConfig: (p) => call(http.get('/process-config', params(p))),
+  addProcessConfig: (d) => call(http.post('/process-config', d)),
+  toggleProcessConfig: (id, d) => call(http.post(`/process-config/${id}/toggle`, d)),
 
   // ---------------- 超标处置闭环 ----------------
   listDisposals: (p) => call(http.get('/disposals', params(p))),

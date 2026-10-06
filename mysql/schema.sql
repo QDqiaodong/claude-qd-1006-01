@@ -15,6 +15,9 @@ CREATE DATABASE IF NOT EXISTS waterworks_plant
 USE waterworks_plant;
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS dosing_record_log;
+DROP TABLE IF EXISTS dosing_record;
+DROP TABLE IF EXISTS process_config;
 DROP TABLE IF EXISTS disposal_log;
 DROP TABLE IF EXISTS disposal_dosing;
 DROP TABLE IF EXISTS disposal_equipment;
@@ -139,6 +142,62 @@ CREATE TABLE disposal_log (
     KEY idx_dl_disposal (disposal_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ---------------- 工艺配置（药剂 / 目标工段） ----------------
+-- 加药登记的「当前有效口径」：登记时药剂与目标工段必须在启用项内，否则不能登记为有效记录。
+-- 配置只增停不删历史：停用某项后，历史记录仍展示登记时的药剂 / 工段，并由后端计算
+-- 「配置已变更」标记，绝不回写改写历史。
+CREATE TABLE process_config (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    item_type VARCHAR(8) NOT NULL,
+    item_name VARCHAR(32) NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME,
+    updated_at DATETIME,
+    UNIQUE KEY uk_pc_item (item_type, item_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------- 加药批次记录 ----------------
+-- 状态机：待确认 → 已确认；待确认 → 异常待复核 → 已确认 / 已退回（只允许这些流转，由后端 Dict 约束）。
+-- uk_dr_batch 保证「同一目标工段 + 同一执行时间」只落一个批次：
+-- 重复点击 / 网络重试 / 两名运行工并发登记，第二个 INSERT 必然唯一冲突，
+-- 由后端转成「已存在批次 #N（当前状态…）」的明确提示，失败方能看到已存在记录，
+-- 不会出现一条待复核、一条已确认的分叉。
+CREATE TABLE dosing_record (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    chem_name VARCHAR(32) NOT NULL,
+    dose_mg_per_l DECIMAL(8,2) NOT NULL,
+    target_section VARCHAR(32) NOT NULL,
+    execute_at DATETIME NOT NULL,
+    operator_name VARCHAR(32) NOT NULL,
+    note VARCHAR(128),
+    status VARCHAR(16) NOT NULL,
+    anomaly_reason VARCHAR(255),
+    review_reason VARCHAR(255),
+    confirmed_by VARCHAR(32),
+    confirmed_at DATETIME,
+    reviewed_by VARCHAR(32),
+    reviewed_at DATETIME,
+    created_at DATETIME,
+    updated_at DATETIME,
+    UNIQUE KEY uk_dr_batch (target_section, execute_at),
+    KEY idx_dr_status (status),
+    KEY idx_dr_execute (execute_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------- 加药批次操作留痕 ----------------
+-- 登记 / 修改 / 确认 / 标记异常 / 复核通过 / 复核退回 全部留痕，退回保留原始登记与原因。
+CREATE TABLE dosing_record_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    record_id BIGINT NOT NULL,
+    action VARCHAR(16) NOT NULL,
+    from_status VARCHAR(16),
+    to_status VARCHAR(16),
+    operator_name VARCHAR(32),
+    detail VARCHAR(255),
+    created_at DATETIME,
+    KEY idx_drl_record (record_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- =====================================================================
 -- 种子数据
 -- =====================================================================
@@ -189,3 +248,38 @@ INSERT INTO disposal_log (id, disposal_id, action, from_status, to_status, opera
 (4, 1, '设备冲突', '执行中', '执行中', '系统', 'F-03 设备已转入反洗，关联标为冲突', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 10 DAY + INTERVAL 40 MINUTE),
 (5, 1, '排除设备', '执行中', '执行中', '王值班', '排除 F-03：反洗预计 4 小时，处置期间改由 F-01/F-02 承担', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 10 DAY + INTERVAL 1 HOUR),
 (6, 1, '解除',   '执行中', '已解除', '王值班', '加大聚合氯化铝投加至 32 mg/L，F-03 反洗期间改由 F-01/F-02 承担，2 小时后复检合格', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 10 DAY + INTERVAL 3 HOUR);
+
+-- ---------------- 工艺配置种子：当前有效药剂与目标工段 ----------------
+INSERT INTO process_config (id, item_type, item_name, enabled, created_at, updated_at) VALUES
+(1, '药剂',     '聚合氯化铝', 1, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY),
+(2, '药剂',     '次氯酸钠',   1, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY),
+(3, '目标工段', '沉淀池-1',   1, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY),
+(4, '目标工段', '沉淀池-2',   1, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY),
+(5, '目标工段', '清水池',     1, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY);
+
+-- ---------------- 加药批次种子：覆盖 已确认 / 待确认 / 异常待复核 / 已退回 四种状态 ----------------
+INSERT INTO dosing_record (id, chem_name, dose_mg_per_l, target_section, execute_at, operator_name, note, status,
+                           anomaly_reason, review_reason, confirmed_by, confirmed_at, reviewed_by, reviewed_at, created_at, updated_at) VALUES
+(1, '聚合氯化铝', 25.00, '沉淀池-1', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 30 DAY, '王运行', '混凝剂前加，常规批次', '已确认',
+ NULL, NULL, '李管理', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 30 DAY + INTERVAL 2 HOUR, NULL, NULL,
+ UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 30 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 30 DAY + INTERVAL 2 HOUR),
+(2, '次氯酸钠', 1.20, '清水池', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 2 DAY, '王运行', '出厂水消毒', '待确认',
+ NULL, NULL, NULL, NULL, NULL, NULL,
+ UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 2 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 2 DAY),
+(3, '聚合氯化铝', 45.00, '沉淀池-2', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 1 DAY, '赵运行', '原水浊度偏高，加大投加', '异常待复核',
+ '投加量 45.00 mg/L 超出常规区间（≤ 35 mg/L），待现场复核', NULL, NULL, NULL, NULL, NULL,
+ UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 1 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 1 DAY + INTERVAL 30 MINUTE),
+(4, '次氯酸钠', 8.50, '清水池', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 3 DAY, '赵运行', NULL, '已退回',
+ '投加量 8.50 mg/L 超出余氯控制要求', '现场回执投加量为 0.85 mg/L，登记多写一位；原始登记保留，退回后重新登记',
+ NULL, NULL, '李管理', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 3 DAY + INTERVAL 2 HOUR,
+ UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 3 DAY, UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 3 DAY + INTERVAL 2 HOUR);
+
+INSERT INTO dosing_record_log (id, record_id, action, from_status, to_status, operator_name, detail, created_at) VALUES
+(1, 1, '登记',     NULL, '待确认',     '王运行', '聚合氯化铝 25.00 mg/L → 沉淀池-1', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 30 DAY),
+(2, 1, '确认',     '待确认', '已确认', '李管理', '核对现场回执无误，确认为有效批次', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 30 DAY + INTERVAL 2 HOUR),
+(3, 2, '登记',     NULL, '待确认',     '王运行', '次氯酸钠 1.20 mg/L → 清水池', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 2 DAY),
+(4, 3, '登记',     NULL, '待确认',     '赵运行', '聚合氯化铝 45.00 mg/L → 沉淀池-2', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 1 DAY),
+(5, 3, '标记异常', '待确认', '异常待复核', '李管理', '投加量 45.00 mg/L 超出常规区间（≤ 35 mg/L），待现场复核', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 1 DAY + INTERVAL 30 MINUTE),
+(6, 4, '登记',     NULL, '待确认',     '赵运行', '次氯酸钠 8.50 mg/L → 清水池', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 3 DAY),
+(7, 4, '标记异常', '待确认', '异常待复核', '李管理', '投加量 8.50 mg/L 超出余氯控制要求', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 3 DAY + INTERVAL 1 HOUR),
+(8, 4, '复核退回', '异常待复核', '已退回', '李管理', '退回原因：现场回执投加量为 0.85 mg/L，登记多写一位；原始登记保留，退回后重新登记', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 3 DAY + INTERVAL 2 HOUR);

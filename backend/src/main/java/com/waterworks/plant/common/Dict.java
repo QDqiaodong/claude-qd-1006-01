@@ -39,6 +39,30 @@ public final class Dict {
     // ---------------- 加药药剂 ----------------
     public static final List<String> CHEM_NAMES = List.of("聚合氯化铝", "次氯酸钠");
 
+    // ---------------- 系统角色 ----------------
+    public static final String ROLE_OPERATOR = "运行工";
+    public static final String ROLE_LAB = "化验员";
+    public static final String ROLE_ADMIN = "管理员";
+
+    // ---------------- 工艺配置项类型 ----------------
+    public static final String CONFIG_CHEM = "药剂";
+    public static final String CONFIG_TARGET = "目标工段";
+    public static final List<String> CONFIG_TYPES = List.of(CONFIG_CHEM, CONFIG_TARGET);
+
+    // ---------------- 加药批次状态机 ----------------
+    // 待确认 → 已确认；待确认 → 异常待复核 → 已确认 / 已退回。
+    // 已确认 / 已退回 为终态；已退回保留原始登记，不得覆盖成另一条正常记录。
+    public static final String DOSING_PENDING = "待确认";
+    public static final String DOSING_CONFIRMED = "已确认";
+    public static final String DOSING_ANOMALY = "异常待复核";
+    public static final String DOSING_RETURNED = "已退回";
+    public static final List<String> DOSING_RECORD_STATUSES =
+            List.of(DOSING_PENDING, DOSING_CONFIRMED, DOSING_ANOMALY, DOSING_RETURNED);
+
+    private static final Map<String, List<String>> DOSING_RECORD_NEXT = Map.of(
+            DOSING_PENDING, List.of(DOSING_CONFIRMED, DOSING_ANOMALY),
+            DOSING_ANOMALY, List.of(DOSING_CONFIRMED, DOSING_RETURNED));
+
     // ---------------- 超标处置：待处置 → 执行中 → 已解除 ----------------
     public static final String DISPOSAL_PENDING = "待处置";
     public static final String DISPOSAL_RUNNING = "执行中";
@@ -126,6 +150,26 @@ public final class Dict {
     /** 处置单状态机：只允许 待处置 → 执行中 → 已解除 顺向流转 */
     public static boolean canTransferDisposal(String from, String to) {
         return DISPOSAL_NEXT.getOrDefault(from, List.of()).contains(to);
+    }
+
+    // ---------------- 角色与加药批次取值方法 ----------------
+
+    public static boolean isAdmin(String role) {
+        return ROLE_ADMIN.equals(role);
+    }
+
+    /** 加药批次登记 / 维护：运行工或管理员 */
+    public static boolean canRegisterDosing(String role) {
+        return ROLE_OPERATOR.equals(role) || ROLE_ADMIN.equals(role);
+    }
+
+    public static boolean isValidConfigType(String itemType) {
+        return itemType != null && CONFIG_TYPES.contains(itemType);
+    }
+
+    /** 加药批次状态机：待确认 → 已确认 / 异常待复核；异常待复核 → 已确认 / 已退回 */
+    public static boolean canTransferDosingRecord(String from, String to) {
+        return DOSING_RECORD_NEXT.getOrDefault(from, List.of()).contains(to);
     }
 
     /**

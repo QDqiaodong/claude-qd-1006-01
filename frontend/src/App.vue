@@ -27,7 +27,7 @@ const tabs = [
   { path: '/raw-water', label: '原水监测', sub: '取水口 · 水质建档' },
   { path: '/sediment', label: '沉淀池', sub: '沉淀 · 停留时间' },
   { path: '/filter', label: '滤池', sub: '砂滤 / 炭滤 · 反洗' },
-  { path: '/dosing', label: '加药', sub: '聚合氯化铝 · 次氯酸钠' },
+  { path: '/dosing', label: '加药', sub: '批次登记 · 异常复核' },
   { path: '/disposal', label: '超标处置', sub: '待处置 → 执行中 → 已解除' }
 ]
 
@@ -47,7 +47,7 @@ const roleDesc = computed(() => {
 async function loadCounts() {
   try {
     const [r, s, f, d, dp] = await Promise.all([
-      api.listRawWaters(), api.listTanks(), api.listFilters(), api.listDosings(), api.listDisposals()
+      api.listRawWaters(), api.listTanks(), api.listFilters(), api.listDosingRecords(), api.listDisposals()
     ])
     counts.value = {
       'raw-water': (r || []).length,
