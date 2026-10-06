@@ -27,7 +27,7 @@ const tabs = [
   { path: '/raw-water', label: '原水监测', sub: '取水口 · 水质建档' },
   { path: '/sediment', label: '沉淀池', sub: '沉淀 · 停留时间' },
   { path: '/filter', label: '滤池', sub: '砂滤 / 炭滤 · 反洗' },
-  { path: '/dosing', label: '加药', sub: '聚合氯化铝 · 次氯酸钠' },
+  { path: '/dosing', label: '加药', sub: '批次登记 · 异常复核' },
   { path: '/disposal', label: '超标处置', sub: '待处置 → 执行中 → 已解除' }
 ]
 
@@ -39,21 +39,21 @@ const counts = ref({ 'raw-water': 0, sediment: 0, filter: 0, dosing: 0, disposal
 const currentView = computed(() => viewMap[currentPath.value] || RawWaterView)
 
 const roleDesc = computed(() => {
-  if (currentRole.value === '运行工') return '运行工：可操作沉淀池 / 滤池 / 加药 / 超标处置，原水只读'
+  if (currentRole.value === '运行工') return '运行工：可操作沉淀池 / 滤池 / 加药登记 / 超标处置，原水只读'
   if (currentRole.value === '化验员') return '化验员：负责原水取样建档与判级，其余只读'
-  return '管理员：全部操作权限，含原水重判（超标）与超标处置'
+  return '管理员：全部操作权限，含原水重判（超标）、加药确认与异常复核、超标处置'
 })
 
 async function loadCounts() {
   try {
     const [r, s, f, d, dp] = await Promise.all([
-      api.listRawWaters(), api.listTanks(), api.listFilters(), api.listDosings(), api.listDisposals()
+      api.listRawWaters(), api.listTanks(), api.listFilters(), api.listDosingRecords(), api.listDisposals()
     ])
     counts.value = {
       'raw-water': (r || []).length,
       sediment: (s || []).length,
       filter: (f || []).length,
-      dosing: (d || []).length,
+      dosing: (d || []).filter(x => x.status === '待确认' || x.status === '异常待复核').length,
       disposal: (dp || []).filter(x => x.status !== '已解除').length
     }
   } catch (e) { /* 计数失败不影响主流程 */ }

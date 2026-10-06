@@ -39,6 +39,31 @@ public final class Dict {
     // ---------------- 加药药剂 ----------------
     public static final List<String> CHEM_NAMES = List.of("聚合氯化铝", "次氯酸钠");
 
+    // ---------------- 角色 ----------------
+    public static final String ROLE_OPERATOR = "运行工";
+    public static final String ROLE_LAB = "化验员";
+    public static final String ROLE_ADMIN = "管理员";
+
+    // ---------------- 加药工艺配置类型 ----------------
+    public static final String CONFIG_CHEM = "药剂";
+    public static final String CONFIG_TARGET = "工段";
+
+    // ---------------- 加药批次：待确认 → 已确认 / 异常待复核 → 复核 ----------------
+    public static final String DR_PENDING = "待确认";
+    public static final String DR_CONFIRMED = "已确认";
+    public static final String DR_REVIEW = "异常待复核";
+    public static final String DR_RETURNED = "已退回";
+    public static final String DR_WITHDRAWN = "已撤回";
+    public static final List<String> DR_STATUSES =
+            List.of(DR_PENDING, DR_CONFIRMED, DR_REVIEW, DR_RETURNED, DR_WITHDRAWN);
+
+    /**
+     * 占用「目标工段 + 执行时间」唯一槽位的状态。
+     * 已退回 / 已撤回 释放槽位（与 dosing_record 的 slot 生成列口径一致），
+     * 释放后同一工段同一时间可重新登记新批次，原记录作为历史保留。
+     */
+    public static final List<String> DR_SLOT_ACTIVE = List.of(DR_PENDING, DR_CONFIRMED, DR_REVIEW);
+
     // ---------------- 超标处置：待处置 → 执行中 → 已解除 ----------------
     public static final String DISPOSAL_PENDING = "待处置";
     public static final String DISPOSAL_RUNNING = "执行中";
@@ -121,6 +146,19 @@ public final class Dict {
 
     public static boolean isValidChemName(String name) {
         return name != null && CHEM_NAMES.contains(name);
+    }
+
+    public static boolean isValidRole(String role) {
+        return ROLE_OPERATOR.equals(role) || ROLE_LAB.equals(role) || ROLE_ADMIN.equals(role);
+    }
+
+    /** 加药批次登记 / 维护：运行工、管理员 */
+    public static boolean canRegisterDosing(String role) {
+        return ROLE_OPERATOR.equals(role) || ROLE_ADMIN.equals(role);
+    }
+
+    public static boolean isValidDosingRecordStatus(String status) {
+        return status != null && DR_STATUSES.contains(status);
     }
 
     /** 处置单状态机：只允许 待处置 → 执行中 → 已解除 顺向流转 */

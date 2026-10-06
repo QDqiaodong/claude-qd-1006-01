@@ -50,6 +50,21 @@ export default {
   createDosing: (d) => call(http.post('/dosings', d)),
   updateDosing: (id, d) => call(http.put(`/dosings/${id}`, d)),
 
+  // ---------------- 加药批次登记与异常复核 ----------------
+  listDosingRecords: (p) => call(http.get('/dosing-records', params(p))),
+  getDosingRecord: (id) => call(http.get(`/dosing-records/${id}`)),
+  registerDosingRecord: (d) => call(http.post('/dosing-records', d)),
+  editDosingRecord: (id, d) => call(http.put(`/dosing-records/${id}`, d)),
+  withdrawDosingRecord: (id, d) => call(http.post(`/dosing-records/${id}/withdraw`, d)),
+  confirmDosingRecord: (id, d) => call(http.post(`/dosing-records/${id}/confirm`, d)),
+  flagDosingRecord: (id, d) => call(http.post(`/dosing-records/${id}/flag`, d)),
+  reviewConfirmDosingRecord: (id, d) => call(http.post(`/dosing-records/${id}/review-confirm`, d)),
+  reviewReturnDosingRecord: (id, d) => call(http.post(`/dosing-records/${id}/review-return`, d)),
+
+  // ---------------- 加药工艺配置 ----------------
+  listDosingConfig: () => call(http.get('/dosing-config')),
+  saveDosingConfig: (d) => call(http.post('/dosing-config/save', d)),
+
   // ---------------- 超标处置闭环 ----------------
   listDisposals: (p) => call(http.get('/disposals', params(p))),
   getDisposal: (id) => call(http.get(`/disposals/${id}`)),
